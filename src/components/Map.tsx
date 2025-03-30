@@ -4,12 +4,22 @@ import type { LayerProps } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import styled from 'styled-components';
 import { getDistance } from 'geolib';
-import { Coordinates, ReferencePointStore, MarkerMetadata, Marker as MarkerType, ReferencePoint } from '../types/types';
-import { encryptData, generateEncryptionKey, clearSensitiveData } from '../crypto/encryption';
+import { 
+  Coordinates, 
+  ReferencePointStore, 
+  MarkerMetadata, 
+  Marker as MarkerType, 
+  ReferencePoint,
+  MarkerFormData,
+  markerCategories,
+  CategoryColor
+} from '../types/types';
 import { useUserLocation } from '../hooks/useUserLocation';
 import MarkerForm from './MarkerForm';
+import CategoryLegend from './CategoryLegend';
 import { markerService } from '../services/markerService';
-import type { FeatureCollection, Point, LineString } from 'geojson';
+import type { FeatureCollection, LineString } from 'geojson';
+import maplibregl from 'maplibre-gl';
 
 const MapWrapper = styled.div`
   width: 100%;
@@ -95,7 +105,6 @@ const radiusLayer: LayerProps = {
 };
 
 const MapComponent: React.FC = () => {
-  const [encryptionKey, setEncryptionKey] = useState<CryptoKey | null>(null);
   const [showMarkerForm, setShowMarkerForm] = useState(false);
   const [pendingCoordinates, setPendingCoordinates] = useState<Coordinates | null>(null);
   const [markers, setMarkers] = useState<MarkerType[]>([]);
@@ -105,40 +114,8 @@ const MapComponent: React.FC = () => {
   const [mapError, setMapError] = useState<string | null>(null);
   const mapRef = useRef<any>(null);
   const [statusMessage, setStatusMessage] = useState<string>('');
-
-  // Add cleanup on unmount
-  useEffect(() => {
-    return () => {
-      // Clear sensitive data when component unmounts
-      clearSensitiveData();
-    };
-  }, []);
-
-  // Add privacy mode toggle
-  const [privacyMode, setPrivacyMode] = useState(true);
-
-  // Add function to handle privacy mode toggle
-  const togglePrivacyMode = useCallback(() => {
-    setPrivacyMode(prev => !prev);
-    if (!privacyMode) {
-      // Clear sensitive data when disabling privacy mode
-      clearSensitiveData();
-    }
-  }, [privacyMode]);
-
-  useEffect(() => {
-    const initializeEncryption = async () => {
-      try {
-        const key = await generateEncryptionKey();
-        setEncryptionKey(key);
-      } catch (error) {
-        console.error('Encryption initialization error:', error);
-        setMapError('Encryption initialization failed');
-      }
-    };
-
-    initializeEncryption();
-  }, []);
+  const mapInstance = useRef<maplibregl.Map | null>(null);
+  const markersRef = useRef<maplibregl.Marker[]>([]);
 
   useEffect(() => {
     if (!userLocation) return;
@@ -181,14 +158,16 @@ const MapComponent: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    console.log('Current state:', {
-      userLocation,
-      locationError,
-      locationLoading,
-      permissionStatus,
-      referencePoint,
-      mapError
-    });
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Current state:', {
+        userLocation,
+        locationError,
+        locationLoading,
+        permissionStatus,
+        referencePoint,
+        mapError
+      });
+    }
   }, [userLocation, locationError, locationLoading, permissionStatus, referencePoint, mapError]);
 
   useEffect(() => {
@@ -205,9 +184,8 @@ const MapComponent: React.FC = () => {
     }
   }, [locationLoading, locationError, mapError, userLocation]);
 
-  // Modify handleMapClick to respect privacy mode
   const handleMapClick = useCallback((event: any) => {
-    if (!encryptionKey || !referencePoint || !privacyMode) return;
+    if (!referencePoint) return;
 
     const clickedCoords: Coordinates = {
       latitude: event.lngLat.lat,
@@ -225,9 +203,8 @@ const MapComponent: React.FC = () => {
     } else {
       alert('İşaretleme noktası konumunuzdan en fazla 1km uzaklıkta olabilir.');
     }
-  }, [encryptionKey, referencePoint, privacyMode]);
+  }, [referencePoint]);
 
-  // Modify handleMarkerSubmit to include additional security measures
   const handleMarkerSubmit = async (metadata: MarkerMetadata) => {
     if (!pendingCoordinates) return;
 
@@ -242,17 +219,14 @@ const MapComponent: React.FC = () => {
         throw new Error('Invalid metadata');
       }
 
-      // Create marker with plain data
-      const newMarker: MarkerType = {
-        id: crypto.randomUUID(),
-        encryptedCoordinates: JSON.stringify(pendingCoordinates),
-        encryptedMetadata: JSON.stringify(metadata),
-        timestamp: new Date().toISOString(),
-        proof: crypto.randomUUID()
+      // Create marker form data
+      const formData: MarkerFormData = {
+        coordinates: pendingCoordinates,
+        metadata: metadata
       };
 
       // Add marker to global service
-      await markerService.addMarker(newMarker);
+      await markerService.addMarker(formData);
       
       setShowMarkerForm(false);
       setPendingCoordinates(null);
@@ -268,7 +242,9 @@ const MapComponent: React.FC = () => {
   };
 
   const handleMapLoad = () => {
-    console.log('Map loaded successfully');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Map loaded successfully');
+    }
     setMapError(null);
   };
 
@@ -276,6 +252,20 @@ const MapComponent: React.FC = () => {
     console.error('Map loading error:', error);
     setMapError('Failed to load map. Please check your internet connection and try again.');
   };
+
+  const getMarkerColor = (category: string): string => {
+    const categoryConfig = markerCategories.find((cat: CategoryColor) => cat.id === category);
+    return categoryConfig ? categoryConfig.color : '#808080'; // Default to gray if category not found
+  };
+
+  const handleGoToUserLocation = useCallback(() => {
+    if (userLocation && mapRef.current) {
+      mapRef.current.flyTo({
+        center: [userLocation.longitude, userLocation.latitude],
+        zoom: 15
+      });
+    }
+  }, [userLocation]);
 
   if (locationLoading) {
     let message;
@@ -426,27 +416,6 @@ const MapComponent: React.FC = () => {
       >
         <NavigationControl position="top-right" />
         
-        {/* Privacy mode toggle button */}
-        <div
-          style={{
-            position: 'absolute',
-            top: '20px',
-            right: '20px',
-            zIndex: 1,
-            background: privacyMode ? '#4CAF50' : '#f44336',
-            color: 'white',
-            padding: '8px 16px',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}
-          onClick={togglePrivacyMode}
-        >
-          <span>{privacyMode ? '🔒 Gizlilik Modu Açık' : '🔓 Gizlilik Modu Kapalı'}</span>
-        </div>
-
         {/* Radius line */}
         {referencePoint && (
           <Source id="radius" type="geojson" data={radiusGeoJSON}>
@@ -455,7 +424,7 @@ const MapComponent: React.FC = () => {
         )}
 
         {/* User location marker */}
-        {userLocation && privacyMode && (
+        {userLocation && (
           <Marker
             longitude={userLocation.longitude}
             latitude={userLocation.latitude}
@@ -475,82 +444,72 @@ const MapComponent: React.FC = () => {
           </Marker>
         )}
 
-        {/* Other markers - removed privacy mode check */}
-        {markers.map(marker => {
-          try {
-            const coords = JSON.parse(marker.encryptedCoordinates);
-            const metadata = JSON.parse(marker.encryptedMetadata);
-            
-            return (
-              <Marker
-                key={marker.id}
-                longitude={coords.longitude}
-                latitude={coords.latitude}
-                anchor="bottom"
+        {/* Other markers */}
+        {markers.map((marker) => (
+          <Marker
+            key={marker.id}
+            longitude={marker.coordinates.longitude}
+            latitude={marker.coordinates.latitude}
+            anchor="bottom"
+          >
+            <div
+              style={{ cursor: 'pointer' }}
+              onClick={(e: React.MouseEvent) => {
+                e.stopPropagation();
+                setSelectedMarker(marker);
+              }}
+            >
+              <svg
+                height="24"
+                viewBox="0 0 24 24"
+                width="24"
+                style={{
+                  fill: getMarkerColor(marker.metadata.category),
+                  stroke: 'white',
+                  strokeWidth: 2,
+                  transform: 'translate(-12px, -24px)',
+                  filter: 'drop-shadow(0 0 2px rgba(0,0,0,0.5))'
+                }}
               >
-                <div
-                  style={{ cursor: 'pointer' }}
-                  onClick={(e: React.MouseEvent) => {
+                <path d="M12 0c-4.198 0-8 3.403-8 7.602 0 4.198 3.469 9.21 8 16.398 4.531-7.188 8-12.2 8-16.398 0-4.199-3.801-7.602-8-7.602zm0 11c-1.657 0-3-1.343-3-3s1.343-3 3-3 3 1.343 3 3-1.343 3-3 3z" />
+              </svg>
+            </div>
+            {selectedMarker?.id === marker.id && (
+              <MarkerPopup>
+                <h3>{marker.metadata.name}</h3>
+                <p><strong>Kategori:</strong> {marker.metadata.category}</p>
+                {marker.metadata.description && (
+                  <p><strong>Açıklama:</strong> {marker.metadata.description}</p>
+                )}
+                <p><strong>Eklenme Tarihi:</strong> {new Date(marker.timestamp).toLocaleString('tr-TR')}</p>
+                <button
+                  onClick={async (e) => {
                     e.stopPropagation();
-                    setSelectedMarker(marker);
+                    try {
+                      await markerService.removeMarker(marker.id);
+                      setSelectedMarker(null);
+                      setStatusMessage('İşaretleme noktası başarıyla silindi');
+                    } catch (error) {
+                      console.error('Error removing marker:', error);
+                      setMapError('İşaretleme noktası silinirken bir hata oluştu');
+                    }
+                  }}
+                  style={{
+                    marginTop: '8px',
+                    padding: '4px 8px',
+                    backgroundColor: '#ff4444',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
                   }}
                 >
-                  <svg
-                    height="24"
-                    viewBox="0 0 24 24"
-                    width="24"
-                    style={{
-                      fill: '#ff4444',
-                      stroke: 'white',
-                      strokeWidth: 2,
-                      transform: 'translate(-12px, -24px)',
-                      filter: 'drop-shadow(0 0 2px rgba(0,0,0,0.5))'
-                    }}
-                  >
-                    <path d="M12 0c-4.198 0-8 3.403-8 7.602 0 4.198 3.469 9.21 8 16.398 4.531-7.188 8-12.2 8-16.398 0-4.199-3.801-7.602-8-7.602zm0 11c-1.657 0-3-1.343-3-3s1.343-3 3-3 3 1.343 3 3-1.343 3-3 3z" />
-                  </svg>
-                </div>
-                {selectedMarker?.id === marker.id && (
-                  <MarkerPopup>
-                    <h3>{metadata.name}</h3>
-                    <p><strong>Kategori:</strong> {metadata.category}</p>
-                    {metadata.description && (
-                      <p><strong>Açıklama:</strong> {metadata.description}</p>
-                    )}
-                    <p><strong>Eklenme Tarihi:</strong> {new Date(marker.timestamp).toLocaleString('tr-TR')}</p>
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        try {
-                          await markerService.removeMarker(marker.id);
-                          setSelectedMarker(null);
-                          setStatusMessage('İşaretleme noktası başarıyla silindi');
-                        } catch (error) {
-                          console.error('Error removing marker:', error);
-                          setMapError('İşaretleme noktası silinirken bir hata oluştu');
-                        }
-                      }}
-                      style={{
-                        marginTop: '8px',
-                        padding: '4px 8px',
-                        backgroundColor: '#ff4444',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Sil
-                    </button>
-                  </MarkerPopup>
-                )}
-              </Marker>
-            );
-          } catch (error) {
-            console.error('Error parsing marker data:', error);
-            return null;
-          }
-        })}
+                  Sil
+                </button>
+              </MarkerPopup>
+            )}
+          </Marker>
+        ))}
       </Map>
       {statusMessage && <StatusMessage>{statusMessage}</StatusMessage>}
       {showMarkerForm && (
@@ -562,8 +521,47 @@ const MapComponent: React.FC = () => {
           }}
         />
       )}
+      <CategoryLegend />
+      <ControlContainer>
+        <LocationButton 
+          onClick={handleGoToUserLocation}
+          disabled={!userLocation || locationLoading}
+          title={locationError || 'Konumuma Git'}
+        >
+          {locationLoading ? '...' : '📍'}
+        </LocationButton>
+      </ControlContainer>
     </MapWrapper>
   );
 };
+
+const LocationButton = styled.button`
+  background: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px;
+  margin: 4px;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  font-size: 18px;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &:hover:not(:disabled) {
+    background: #f0f0f0;
+  }
+`;
+
+const ControlContainer = styled.div`
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+`;
 
 export default MapComponent;

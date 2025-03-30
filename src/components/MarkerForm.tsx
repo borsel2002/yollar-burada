@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import { MarkerMetadata, MarkerCategory } from '../types/types';
+import { MarkerMetadata, markerCategories } from '../types/types';
 
 const FormOverlay = styled.div`
   position: fixed;
@@ -15,12 +15,19 @@ const FormOverlay = styled.div`
   z-index: 1000;
 `;
 
-const FormContainer = styled.form`
+const FormContainer = styled.div`
   background: white;
   padding: 20px;
   border-radius: 8px;
-  width: 90%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  width: 100%;
   max-width: 400px;
+`;
+
+const FormTitle = styled.h2`
+  margin: 0 0 20px 0;
+  font-size: 20px;
+  color: #333;
 `;
 
 const FormGroup = styled.div`
@@ -30,63 +37,71 @@ const FormGroup = styled.div`
 const Label = styled.label`
   display: block;
   margin-bottom: 5px;
-  font-weight: bold;
+  font-size: 14px;
+  color: #666;
 `;
 
 const Input = styled.input`
   width: 100%;
   padding: 8px;
-  border: 1px solid #ccc;
+  border: 1px solid #ddd;
   border-radius: 4px;
+  font-size: 14px;
+
+  &:focus {
+    outline: none;
+    border-color: #0080ff;
+  }
 `;
 
 const Select = styled.select`
   width: 100%;
   padding: 8px;
-  border: 1px solid #ccc;
+  border: 1px solid #ddd;
   border-radius: 4px;
+  font-size: 14px;
+
+  &:focus {
+    outline: none;
+    border-color: #0080ff;
+  }
 `;
 
 const TextArea = styled.textarea`
   width: 100%;
   padding: 8px;
-  border: 1px solid #ccc;
+  border: 1px solid #ddd;
   border-radius: 4px;
+  font-size: 14px;
   min-height: 100px;
+  resize: vertical;
+
+  &:focus {
+    outline: none;
+    border-color: #0080ff;
+  }
 `;
 
 const ButtonGroup = styled.div`
   display: flex;
-  justify-content: flex-end;
   gap: 10px;
+  justify-content: flex-end;
   margin-top: 20px;
 `;
 
-const Button = styled.button`
+const Button = styled.button<{ $variant?: 'primary' | 'secondary' }>`
   padding: 8px 16px;
   border: none;
   border-radius: 4px;
+  font-size: 14px;
   cursor: pointer;
-  font-weight: bold;
+  background-color: ${props => props.$variant === 'primary' ? '#0080ff' : '#f44336'};
+  color: white;
 
-  &.primary {
-    background: #0080ff;
-    color: white;
-  }
-
-  &.secondary {
-    background: #f0f0f0;
-    color: #333;
+  &:hover {
+    opacity: 0.9;
   }
 `;
-
-const markerCategories: Array<{ id: MarkerCategory; label: string }> = [
-  { id: 'hazard', label: 'Tehlike' },
-  { id: 'incident', label: 'Olay' },
-  { id: 'service', label: 'Hizmet' },
-  { id: 'poi', label: 'İlgi Noktası' },
-  { id: 'other', label: 'Diğer' }
-];
 
 interface MarkerFormProps {
   onSubmit: (metadata: MarkerMetadata) => void;
@@ -94,68 +109,79 @@ interface MarkerFormProps {
 }
 
 const MarkerForm: React.FC<MarkerFormProps> = ({ onSubmit, onCancel }) => {
-  const [name, setName] = useState('');
-  const [category, setCategory] = useState<MarkerCategory>(markerCategories[0].id);
-  const [description, setDescription] = useState('');
+  const [formData, setFormData] = useState<MarkerMetadata>({
+    name: '',
+    category: 'other',
+    description: ''
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({
-      name,
-      category,
-      description
-    });
+    onSubmit(formData);
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
   return (
     <FormOverlay>
-      <FormContainer onSubmit={handleSubmit}>
-        <FormGroup>
-          <Label htmlFor="name">İsim*</Label>
-          <Input
-            id="name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            placeholder="İşaret için bir isim girin"
-          />
-        </FormGroup>
+      <FormContainer>
+        <form onSubmit={handleSubmit}>
+          <FormTitle>Yeni İşaretleme Noktası</FormTitle>
+          
+          <FormGroup>
+            <Label htmlFor="name">İsim</Label>
+            <Input
+              type="text"
+              id="name"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              required
+            />
+          </FormGroup>
 
-        <FormGroup>
-          <Label htmlFor="category">Kategori*</Label>
-          <Select
-            id="category"
-            value={category}
-            onChange={(e) => setCategory(e.target.value as MarkerCategory)}
-            required
-          >
-            {markerCategories.map(cat => (
-              <option key={cat.id} value={cat.id}>
-                {cat.label}
-              </option>
-            ))}
-          </Select>
-        </FormGroup>
+          <FormGroup>
+            <Label htmlFor="category">Kategori</Label>
+            <Select
+              id="category"
+              name="category"
+              value={formData.category}
+              onChange={handleChange}
+              required
+            >
+              {markerCategories.map(category => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </Select>
+          </FormGroup>
 
-        <FormGroup>
-          <Label htmlFor="description">Açıklama</Label>
-          <TextArea
-            id="description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="İsteğe bağlı açıklama ekleyin"
-          />
-        </FormGroup>
+          <FormGroup>
+            <Label htmlFor="description">Açıklama</Label>
+            <TextArea
+              id="description"
+              name="description"
+              value={formData.description}
+              onChange={handleChange}
+            />
+          </FormGroup>
 
-        <ButtonGroup>
-          <Button type="button" className="secondary" onClick={onCancel}>
-            İptal
-          </Button>
-          <Button type="submit" className="primary">
-            Kaydet
-          </Button>
-        </ButtonGroup>
+          <ButtonGroup>
+            <Button type="button" onClick={onCancel}>
+              İptal
+            </Button>
+            <Button type="submit" $variant="primary">
+              Ekle
+            </Button>
+          </ButtonGroup>
+        </form>
       </FormContainer>
     </FormOverlay>
   );

@@ -1,29 +1,41 @@
-import { Marker } from '../types/types';
-import { clearSensitiveData } from '../crypto/encryption';
+import { Marker, MarkerFormData } from '../types/types';
 
 const API_URL = 'http://localhost:3001/api';
 
 class MarkerService {
+  private ws: WebSocket | null = null;
   private markers: Marker[] = [];
   private subscribers: ((markers: Marker[]) => void)[] = [];
   private readonly MAX_MARKERS = 1000;
   private readonly SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
   constructor() {
-    this.loadMarkers();
+    this.clearMarkers();
     this.setupPeriodicSync();
   }
 
-  private async loadMarkers() {
+  private async clearMarkers(): Promise<void> {
+    try {
+      await fetch(`${API_URL}/markers`, {
+        method: 'DELETE'
+      });
+      this.markers = [];
+    } catch (error) {
+      console.error('Error clearing markers:', error);
+    }
+  }
+
+  private async loadMarkers(): Promise<Marker[]> {
     try {
       const response = await fetch(`${API_URL}/markers`);
-      if (!response.ok) throw new Error('Failed to load markers');
-      const markers = await response.json();
-      this.markers = markers.filter(this.isValidMarker);
-      this.notifySubscribers();
+      if (!response.ok) {
+        throw new Error('Failed to load markers');
+      }
+      this.markers = await response.json();
+      return this.markers;
     } catch (error) {
       console.error('Error loading markers:', error);
-      this.clearAllMarkers();
+      return [];
     }
   }
 
@@ -33,11 +45,16 @@ class MarkerService {
     }, this.SYNC_INTERVAL);
   }
 
-  async addMarker(marker: Marker) {
+  async addMarker(formData: MarkerFormData): Promise<void> {
     try {
-      if (!this.isValidMarker(marker)) {
-        throw new Error('Invalid marker data');
-      }
+      const marker: Marker = {
+        id: crypto.randomUUID(),
+        coordinates: formData.coordinates,
+        metadata: formData.metadata,
+        timestamp: new Date().toISOString(),
+        proof: crypto.randomUUID(),
+        creatorId: crypto.randomUUID() // In a real app, this would be the user's ID
+      };
 
       const response = await fetch(`${API_URL}/markers`, {
         method: 'POST',
@@ -47,8 +64,10 @@ class MarkerService {
         body: JSON.stringify(marker),
       });
 
-      if (!response.ok) throw new Error('Failed to add marker');
-      
+      if (!response.ok) {
+        throw new Error('Failed to add marker');
+      }
+
       const newMarker = await response.json();
       this.markers.push(newMarker);
       
@@ -63,42 +82,21 @@ class MarkerService {
     }
   }
 
-  async removeMarker(markerId: string) {
+  async removeMarker(markerId: string): Promise<void> {
     try {
       const response = await fetch(`${API_URL}/markers/${markerId}`, {
         method: 'DELETE',
       });
 
-      if (!response.ok) throw new Error('Failed to remove marker');
-      
+      if (!response.ok) {
+        throw new Error('Failed to remove marker');
+      }
+
       this.markers = this.markers.filter(marker => marker.id !== markerId);
       this.notifySubscribers();
     } catch (error) {
       console.error('Error removing marker:', error);
       throw error;
-    }
-  }
-
-  private isValidMarker(marker: Marker): boolean {
-    try {
-      if (!marker || !marker.id || !marker.encryptedCoordinates || !marker.encryptedMetadata || !marker.timestamp || !marker.proof) {
-        return false;
-      }
-
-      const coords = JSON.parse(marker.encryptedCoordinates);
-      if (!coords.latitude || !coords.longitude) {
-        return false;
-      }
-
-      const metadata = JSON.parse(marker.encryptedMetadata);
-      if (!metadata.name || !metadata.category) {
-        return false;
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Error validating marker:', error);
-      return false;
     }
   }
 
@@ -117,14 +115,8 @@ class MarkerService {
     this.subscribers.forEach(callback => callback(this.getMarkers()));
   }
 
-  clearAllMarkers() {
-    this.markers = [];
-    this.notifySubscribers();
-  }
-
   reset() {
-    this.clearAllMarkers();
-    clearSensitiveData();
+    this.clearMarkers();
   }
 }
 

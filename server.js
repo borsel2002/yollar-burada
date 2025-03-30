@@ -28,6 +28,12 @@ app.delete('/api/markers/:id', (req, res) => {
   res.json({ success: true });
 });
 
+// Clear all markers
+app.delete('/api/markers', (req, res) => {
+  markers = [];
+  res.json({ success: true });
+});
+
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
 }); 
