@@ -1,46 +1,67 @@
-# Getting Started with Create React App
+# Secure Private Marker Map
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A privacy-focused web application for securely marking locations without exposing coordinates to servers or third parties.
 
-## Available Scripts
+## Features
 
-In the project directory, you can run:
+- 🔒 **Privacy First**: All location data is encrypted client-side
+- 📍 **Location Validation**: Markers must be within 1km of user's location
+- 🗺️ **Platform-Specific Maps**:
+  - iOS: Apple Maps
+  - Android: Google Maps
+  - Others: MapLibre GL
+- 🏷️ **Marker Categories**: Organize markers by type (hazard, point of interest, etc.)
+- 📝 **Encrypted Notes**: Add private notes to markers
+- ⚡ **Zero-Knowledge Proofs**: Validate marker placement without revealing coordinates
 
-### `npm start`
+## Getting Started
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+2. Configure environment variables:
+   - Copy `.env.example` to `.env`
+   - Add your Google Maps API key (required for Android)
 
-### `npm test`
+3. Start the development server:
+   ```bash
+   npm start
+   ```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Security Features
 
-### `npm run build`
+- End-to-end encryption using Web Crypto API (AES-256-GCM)
+- Zero-knowledge proofs for location validation
+- No server-side storage of plaintext coordinates
+- Client-side key management
+- No personal data collection
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Usage
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+1. Allow location access when prompted
+2. Click anywhere within the 1km radius to place a marker
+3. Fill in marker details:
+   - Name
+   - Category
+   - Optional description
+4. Marker data is encrypted before storage
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## Technical Stack
 
-### `npm run eject`
+- React with TypeScript
+- MapLibre GL / Google Maps / Apple Maps
+- Web Crypto API for encryption
+- Geolib for distance calculations
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+## Privacy Considerations
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+- All location data is encrypted before leaving the device
+- The server never receives plaintext coordinates
+- No tracking or analytics
+- No personal identifiers stored
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+## License
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
+MIT
