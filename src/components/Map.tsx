@@ -1,5 +1,11 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import Map, { Source, Layer, Marker, NavigationControl } from 'react-map-gl/maplibre';
+import MapLibreMap, { 
+  Marker as MapLibreMarker, 
+  NavigationControl, 
+  ScaleControl,
+  Source,
+  Layer 
+} from 'react-map-gl/maplibre';
 import type { LayerProps } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import styled from 'styled-components';
@@ -20,6 +26,7 @@ import CategoryLegend from './CategoryLegend';
 import { markerService } from '../services/markerService';
 import type { FeatureCollection, LineString } from 'geojson';
 import maplibregl from 'maplibre-gl';
+import MarkerPopup from './MarkerPopup';
 
 const MapWrapper = styled.div`
   width: 100%;
@@ -58,24 +65,6 @@ const ErrorMessage = styled.div`
   padding: 10px 20px;
   border-radius: 4px;
   z-index: 1000;
-`;
-
-const MarkerPopup = styled.div`
-  background: white;
-  padding: 12px;
-  border-radius: 4px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  max-width: 200px;
-
-  h3 {
-    margin: 0 0 8px 0;
-    font-size: 16px;
-  }
-
-  p {
-    margin: 4px 0;
-    font-size: 14px;
-  }
 `;
 
 const StatusMessage = styled.div`
@@ -267,6 +256,39 @@ const MapComponent: React.FC = () => {
     }
   }, [userLocation]);
 
+  const getRemainingTime = (marker: MarkerType): string => {
+    const currentTime = new Date().getTime();
+    const expiresAt = new Date(marker.expiresAt).getTime();
+    const remainingMs = expiresAt - currentTime;
+
+    if (remainingMs <= 0) {
+      return 'Süresi doldu';
+    }
+
+    const hours = Math.floor(remainingMs / (1000 * 60 * 60));
+    const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((remainingMs % (1000 * 60)) / 1000);
+
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const handleMarkerClick = async (marker: MarkerType) => {
+    setSelectedMarker(marker);
+  };
+
+  const handleDeleteMarker = async () => {
+    if (!selectedMarker) return;
+
+    try {
+      await markerService.removeMarker(selectedMarker.id);
+      setSelectedMarker(null);
+      setStatusMessage('Marker başarıyla silindi');
+    } catch (error) {
+      setMapError('Marker silinirken bir hata oluştu');
+      console.error('Error deleting marker:', error);
+    }
+  };
+
   if (locationLoading) {
     let message;
     switch (permissionStatus) {
@@ -377,7 +399,7 @@ const MapComponent: React.FC = () => {
 
   return (
     <MapWrapper>
-      <Map
+      <MapLibreMap
         ref={mapRef}
         mapLib={import('maplibre-gl')}
         initialViewState={{
@@ -425,7 +447,7 @@ const MapComponent: React.FC = () => {
 
         {/* User location marker */}
         {userLocation && (
-          <Marker
+          <MapLibreMarker
             longitude={userLocation.longitude}
             latitude={userLocation.latitude}
             anchor="center"
@@ -441,12 +463,12 @@ const MapComponent: React.FC = () => {
                 transform: 'translate(-12px, -12px)'
               }}
             />
-          </Marker>
+          </MapLibreMarker>
         )}
 
         {/* Other markers */}
         {markers.map((marker) => (
-          <Marker
+          <MapLibreMarker
             key={marker.id}
             longitude={marker.coordinates.longitude}
             latitude={marker.coordinates.latitude}
@@ -456,7 +478,7 @@ const MapComponent: React.FC = () => {
               style={{ cursor: 'pointer' }}
               onClick={(e: React.MouseEvent) => {
                 e.stopPropagation();
-                setSelectedMarker(marker);
+                handleMarkerClick(marker);
               }}
             >
               <svg
@@ -475,42 +497,17 @@ const MapComponent: React.FC = () => {
               </svg>
             </div>
             {selectedMarker?.id === marker.id && (
-              <MarkerPopup>
-                <h3>{marker.metadata.name}</h3>
-                <p><strong>Kategori:</strong> {marker.metadata.category}</p>
-                {marker.metadata.description && (
-                  <p><strong>Açıklama:</strong> {marker.metadata.description}</p>
-                )}
-                <p><strong>Eklenme Tarihi:</strong> {new Date(marker.timestamp).toLocaleString('tr-TR')}</p>
-                <button
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    try {
-                      await markerService.removeMarker(marker.id);
-                      setSelectedMarker(null);
-                      setStatusMessage('İşaretleme noktası başarıyla silindi');
-                    } catch (error) {
-                      console.error('Error removing marker:', error);
-                      setMapError('İşaretleme noktası silinirken bir hata oluştu');
-                    }
-                  }}
-                  style={{
-                    marginTop: '8px',
-                    padding: '4px 8px',
-                    backgroundColor: '#ff4444',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Sil
-                </button>
-              </MarkerPopup>
+              <MarkerPopup
+                marker={marker}
+                onClose={() => setSelectedMarker(null)}
+                onDelete={handleDeleteMarker}
+                canDelete={markerService.canRemoveMarker(marker.id)}
+                remainingTime={getRemainingTime(marker)}
+              />
             )}
-          </Marker>
+          </MapLibreMarker>
         ))}
-      </Map>
+      </MapLibreMap>
       {statusMessage && <StatusMessage>{statusMessage}</StatusMessage>}
       {showMarkerForm && (
         <MarkerForm

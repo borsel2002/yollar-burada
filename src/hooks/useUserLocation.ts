@@ -57,6 +57,8 @@ export function useUserLocation(): UseUserLocationResult {
           errorMessage = 'Bilinmeyen bir hata oluştu.';
       }
       setError(errorMessage);
+      // Use default coordinates when location services fail
+      setLocation(DEFAULT_COORDINATES);
       setLoading(false);
     };
 

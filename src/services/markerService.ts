@@ -28,15 +28,37 @@ export class MarkerService {
   private connectWebSocket() {
     this.ws = new WebSocket(WS_URL);
 
+    this.ws.onopen = () => {
+      console.log('WebSocket connected');
+    };
+
     this.ws.onmessage = (event) => {
       try {
-        const message = JSON.parse(event.data);
-        if (message.type === 'markers') {
-          this.markers = message.data;
+        const data = JSON.parse(event.data);
+        console.log('Received WebSocket message:', data); // Debug log
+
+        if (data.type === 'markers') {
+          // Ensure data.data is an array
+          if (!Array.isArray(data.data)) {
+            console.error('Invalid markers data received:', data);
+            return;
+          }
+
+          // Filter out expired markers
+          const currentTime = new Date().getTime();
+          this.markers = data.data.filter((marker: Marker) => {
+            if (!marker || !marker.expiresAt) {
+              console.warn('Invalid marker data:', marker);
+              return false;
+            }
+            const expiresAt = new Date(marker.expiresAt).getTime();
+            return currentTime < expiresAt;
+          });
           this.notifySubscribers();
         }
       } catch (error) {
-        console.error('Error processing WebSocket message:', error);
+        console.error('Error parsing WebSocket message:', error);
+        console.error('Raw message:', event.data);
       }
     };
 
@@ -83,6 +105,23 @@ export class MarkerService {
 
   async removeMarker(markerId: string): Promise<void> {
     try {
+      const marker = this.markers.find(m => m.id === markerId);
+      if (!marker) {
+        throw new Error('Marker not found');
+      }
+
+      // Check if the marker has expired
+      const currentTime = new Date().getTime();
+      const expiresAt = new Date(marker.expiresAt).getTime();
+      if (currentTime >= expiresAt) {
+        throw new Error('Marker has expired');
+      }
+
+      // Check if the current device is the creator
+      if (marker.creatorId !== this.deviceId) {
+        throw new Error('Only the creator can remove this marker');
+      }
+
       const response = await fetch(`${API_URL}/markers/${markerId}`, {
         method: 'DELETE',
       });
@@ -98,8 +137,26 @@ export class MarkerService {
     }
   }
 
+  canRemoveMarker(markerId: string): boolean {
+    const marker = this.markers.find(m => m.id === markerId);
+    if (!marker) return false;
+
+    // Check if the marker has expired
+    const currentTime = new Date().getTime();
+    const expiresAt = new Date(marker.expiresAt).getTime();
+    if (currentTime >= expiresAt) return true;
+
+    // Check if the current device is the creator
+    return marker.creatorId === this.deviceId;
+  }
+
   getMarkers(): Marker[] {
-    return [...this.markers];
+    // Filter out expired markers
+    const currentTime = new Date().getTime();
+    return this.markers.filter(marker => {
+      const expiresAt = new Date(marker.expiresAt).getTime();
+      return currentTime < expiresAt;
+    });
   }
 
   subscribeToMarkers(callback: (markers: Marker[]) => void) {
