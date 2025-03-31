@@ -22,6 +22,7 @@ export interface Marker {
   timestamp: string;
   proof: string;
   creatorId: string;
+  expiresAt: string;
 }
 
 export interface MarkerFormData {

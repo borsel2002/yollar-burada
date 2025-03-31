@@ -3,17 +3,29 @@ import { Marker, MarkerFormData } from '../types/types';
 const API_URL = 'http://localhost:3001/api';
 const WS_URL = 'ws://localhost:3001';
 
-class MarkerService {
+export class MarkerService {
   private ws: WebSocket | null = null;
   private markers: Marker[] = [];
   private subscribers: ((markers: Marker[]) => void)[] = [];
   private readonly MAX_MARKERS = 1000;
+  private deviceId: string;
 
   constructor() {
-    this.initializeWebSocket();
+    this.deviceId = this.getOrCreateDeviceId();
+    this.connectWebSocket();
   }
 
-  private initializeWebSocket() {
+  private getOrCreateDeviceId(): string {
+    const storedId = localStorage.getItem('deviceId');
+    if (storedId) {
+      return storedId;
+    }
+    const newId = crypto.randomUUID();
+    localStorage.setItem('deviceId', newId);
+    return newId;
+  }
+
+  private connectWebSocket() {
     this.ws = new WebSocket(WS_URL);
 
     this.ws.onmessage = (event) => {
@@ -30,7 +42,7 @@ class MarkerService {
 
     this.ws.onclose = () => {
       console.log('WebSocket connection closed. Attempting to reconnect...');
-      setTimeout(() => this.initializeWebSocket(), 5000);
+      setTimeout(() => this.connectWebSocket(), 5000);
     };
 
     this.ws.onerror = (error) => {
@@ -45,8 +57,9 @@ class MarkerService {
         coordinates: formData.coordinates,
         metadata: formData.metadata,
         timestamp: new Date().toISOString(),
-        proof: crypto.randomUUID(),
-        creatorId: crypto.randomUUID() // In a real app, this would be the user's ID
+        proof: '0x', // Placeholder for proof
+        creatorId: this.deviceId,
+        expiresAt: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString() // 4 hours from now
       };
 
       const response = await fetch(`${API_URL}/markers`, {

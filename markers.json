@@ -1,1 +1,69 @@
-[]
+[
+  {
+    "id": "w9xmtv6l15pm8wc046k",
+    "coordinates": {
+      "latitude": 0,
+      "longitude": 0
+    },
+    "metadata": {
+      "name": "Test",
+      "category": "accident",
+      "description": ""
+    },
+    "timestamp": "2025-03-31T00:29:07.244Z",
+    "proof": "",
+    "creatorId": "b6d2daa9-9fc8-4f8d-9845-1a5bcb9f44ce",
+    "deviceId": "b6d2daa9-9fc8-4f8d-9845-1a5bcb9f44ce",
+    "expiresAt": "2025-03-31T04:29:07.244Z"
+  },
+  {
+    "id": "a2r4tzh5rjwm8wc2iwd",
+    "coordinates": {
+      "latitude": 0,
+      "longitude": 0
+    },
+    "metadata": {
+      "name": "Test",
+      "category": "garbage",
+      "description": ""
+    },
+    "timestamp": "2025-03-31T00:30:59.629Z",
+    "proof": "",
+    "creatorId": "838c45fe-4cd5-4f23-aa9e-2a7089aa168f",
+    "deviceId": "838c45fe-4cd5-4f23-aa9e-2a7089aa168f",
+    "expiresAt": "2025-03-31T04:30:59.629Z"
+  },
+  {
+    "id": "tx173bd5jmnm8wc3qsf",
+    "coordinates": {
+      "latitude": 0,
+      "longitude": 0
+    },
+    "metadata": {
+      "name": "Test",
+      "category": "garbage",
+      "description": ""
+    },
+    "timestamp": "2025-03-31T00:31:56.511Z",
+    "proof": "",
+    "creatorId": "838c45fe-4cd5-4f23-aa9e-2a7089aa168f",
+    "deviceId": "838c45fe-4cd5-4f23-aa9e-2a7089aa168f",
+    "expiresAt": "2025-03-31T04:31:56.511Z"
+  },
+  {
+    "id": "50477deb-e437-4170-9fa8-2864c4412c08",
+    "coordinates": {
+      "latitude": 38.39358269364351,
+      "longitude": 27.057889955174716
+    },
+    "metadata": {
+      "name": "Test",
+      "category": "other",
+      "description": ""
+    },
+    "timestamp": "2025-03-31T01:29:31.287Z",
+    "proof": "0x",
+    "creatorId": "838c45fe-4cd5-4f23-aa9e-2a7089aa168f",
+    "expiresAt": "2025-03-31T05:29:31.290Z"
+  }
+]
