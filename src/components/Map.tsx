@@ -258,6 +258,32 @@ const MapComponent: React.FC = () => {
     return categoryConfig ? categoryConfig.color : '#808080'; // Default to gray if category not found
   };
 
+  const getMarkerZIndex = (category: string): number => {
+    // Prioritize markers by category - danger group has highest priority
+    switch (category) {
+      case 'accident':
+        return 100; // Highest priority
+      case 'hazard':
+        return 90;
+      case 'expensive_gas':
+        return 80;
+      case 'police':
+        return 70;
+      case 'camera':
+        return 60;
+      case 'roadwork':
+        return 50;
+      case 'traffic':
+        return 40;
+      case 'garbage_truck':
+        return 30;
+      case 'other':
+        return 10; // Lowest priority
+      default:
+        return 10;
+    }
+  };
+
   const handleGoToUserLocation = useCallback(() => {
     if (userLocation && mapRef.current) {
       mapRef.current.flyTo({
@@ -375,6 +401,61 @@ const MapComponent: React.FC = () => {
     ]
   };
 
+  const MarkerPopup = styled.div`
+    background: white;
+    padding: 16px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    max-width: 280px;
+    min-width: 220px;
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+
+    h3 {
+      margin: 0 0 12px 0;
+      font-size: 16px;
+      font-weight: bold;
+      color: #333;
+    }
+
+    p {
+      margin: 8px 0;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    button {
+      margin-top: 12px;
+      padding: 6px 12px;
+      background-color: #ff4444;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      
+      &:hover {
+        background-color: #ff2222;
+      }
+    }
+
+    &:after {
+      content: '';
+      position: absolute;
+      bottom: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 10px solid transparent;
+      border-right: 10px solid transparent;
+      border-top: 10px solid white;
+    }
+  `;
+
   return (
     <MapWrapper>
       <Map
@@ -395,7 +476,8 @@ const MapComponent: React.FC = () => {
                 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png'
               ],
               tileSize: 256,
-              attribution: '© Stadia Maps, © OpenMapTiles, © OpenStreetMap contributors'
+              attribution: ' Stadia Maps, OpenMapTiles, OpenStreetMap contributors',
+              maxzoom: 19
             }
           },
           layers: [
@@ -453,7 +535,11 @@ const MapComponent: React.FC = () => {
             anchor="bottom"
           >
             <div
-              style={{ cursor: 'pointer' }}
+              style={{ 
+                cursor: 'pointer',
+                position: 'relative',
+                zIndex: getMarkerZIndex(marker.metadata.category)
+              }}
               onClick={(e: React.MouseEvent) => {
                 e.stopPropagation();
                 setSelectedMarker(marker);
@@ -475,38 +561,31 @@ const MapComponent: React.FC = () => {
               </svg>
             </div>
             {selectedMarker?.id === marker.id && (
-              <MarkerPopup>
-                <h3>{marker.metadata.name}</h3>
-                <p><strong>Kategori:</strong> {marker.metadata.category}</p>
-                {marker.metadata.description && (
-                  <p><strong>Açıklama:</strong> {marker.metadata.description}</p>
-                )}
-                <p><strong>Eklenme Tarihi:</strong> {new Date(marker.timestamp).toLocaleString('tr-TR')}</p>
-                <button
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    try {
-                      await markerService.removeMarker(marker.id);
-                      setSelectedMarker(null);
-                      setStatusMessage('İşaretleme noktası başarıyla silindi');
-                    } catch (error) {
-                      console.error('Error removing marker:', error);
-                      setMapError('İşaretleme noktası silinirken bir hata oluştu');
-                    }
-                  }}
-                  style={{
-                    marginTop: '8px',
-                    padding: '4px 8px',
-                    backgroundColor: '#ff4444',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Sil
-                </button>
-              </MarkerPopup>
+              <div style={{ position: 'absolute', zIndex: 3 }}>
+                <MarkerPopup>
+                  <h3>{marker.metadata.name}</h3>
+                  <p><strong>Kategori:</strong> {marker.metadata.category}</p>
+                  {marker.metadata.description && (
+                    <p><strong>Açıklama:</strong> {marker.metadata.description}</p>
+                  )}
+                  <p><strong>Eklenme Tarihi:</strong> {new Date(marker.timestamp).toLocaleString('tr-TR')}</p>
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        await markerService.removeMarker(marker.id);
+                        setSelectedMarker(null);
+                        setStatusMessage('İşaretleme noktası başarıyla silindi');
+                      } catch (error) {
+                        console.error('Error removing marker:', error);
+                        setMapError('İşaretleme noktası silinirken bir hata oluştu');
+                      }
+                    }}
+                  >
+                    Sil
+                  </button>
+                </MarkerPopup>
+              </div>
             )}
           </Marker>
         ))}
@@ -557,7 +636,7 @@ const LocationButton = styled.button`
 
 const ControlContainer = styled.div`
   position: absolute;
-  top: 10px;
+  top: 80px; 
   right: 10px;
   z-index: 1000;
   display: flex;

@@ -110,14 +110,20 @@ interface MarkerFormProps {
 
 const MarkerForm: React.FC<MarkerFormProps> = ({ onSubmit, onCancel }) => {
   const [formData, setFormData] = useState<MarkerMetadata>({
-    name: '',
+    name: 'Marker',
     category: 'other',
     description: ''
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    // Set the name based on the selected category
+    const categoryInfo = markerCategories.find(cat => cat.id === formData.category);
+    const updatedFormData = {
+      ...formData,
+      name: categoryInfo ? categoryInfo.name : 'Marker'
+    };
+    onSubmit(updatedFormData);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -134,18 +140,6 @@ const MarkerForm: React.FC<MarkerFormProps> = ({ onSubmit, onCancel }) => {
         <form onSubmit={handleSubmit}>
           <FormTitle>Yeni İşaretleme Noktası</FormTitle>
           
-          <FormGroup>
-            <Label htmlFor="name">İsim</Label>
-            <Input
-              type="text"
-              id="name"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              required
-            />
-          </FormGroup>
-
           <FormGroup>
             <Label htmlFor="category">Kategori</Label>
             <Select
