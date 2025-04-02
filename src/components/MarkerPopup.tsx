@@ -19,6 +19,17 @@ const PopupContainer = styled.div`
   max-width: 300px;
   margin-bottom: 10px;
   position: relative;
+  
+  @media (max-width: 768px) {
+    min-width: 180px;
+    max-width: 260px;
+    padding: 10px;
+  }
+  
+  @media (max-width: 480px) {
+    min-width: 160px;
+    max-width: 240px;
+  }
 `;
 
 const CloseButton = styled.button`
@@ -30,6 +41,18 @@ const CloseButton = styled.button`
   cursor: pointer;
   font-size: 16px;
   color: #666;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  @media (max-width: 768px) {
+    font-size: 18px;
+    width: 28px;
+    height: 28px;
+  }
+  
   &:hover {
     color: #000;
   }
@@ -39,12 +62,22 @@ const Title = styled.h3`
   margin: 0 0 8px 0;
   font-size: 16px;
   padding-right: 20px;
+  
+  @media (max-width: 768px) {
+    font-size: 15px;
+    margin: 0 0 6px 0;
+  }
 `;
 
 const Description = styled.p`
   margin: 8px 0;
   font-size: 14px;
   color: #333;
+  
+  @media (max-width: 768px) {
+    font-size: 13px;
+    margin: 6px 0;
+  }
 `;
 
 const CategoryBadge = styled.span<{ color: string }>`
@@ -55,12 +88,23 @@ const CategoryBadge = styled.span<{ color: string }>`
   font-size: 12px;
   display: inline-block;
   margin-bottom: 8px;
+  
+  @media (max-width: 768px) {
+    font-size: 11px;
+    padding: 2px 6px;
+    margin-bottom: 6px;
+  }
 `;
 
 const Timestamp = styled.div`
   font-size: 12px;
   color: #666;
   margin-top: 8px;
+  
+  @media (max-width: 768px) {
+    font-size: 11px;
+    margin-top: 6px;
+  }
 `;
 
 const DeleteButton = styled.button`
@@ -72,6 +116,13 @@ const DeleteButton = styled.button`
   margin-top: 10px;
   cursor: pointer;
   font-size: 12px;
+  
+  @media (max-width: 768px) {
+    padding: 6px 12px;
+    font-size: 13px;
+    margin-top: 8px;
+  }
+  
   &:hover {
     background: #ff2222;
   }
@@ -86,6 +137,11 @@ const ExpiryInfo = styled.div`
   color: #666;
   margin-top: 5px;
   font-style: italic;
+  
+  @media (max-width: 768px) {
+    font-size: 11px;
+    margin-top: 4px;
+  }
 `;
 
 const MarkerPopup: React.FC<MarkerPopupProps> = ({ 

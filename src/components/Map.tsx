@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import Map, { Source, Layer, Marker, NavigationControl } from 'react-map-gl/maplibre';
+import Map, { Source, Layer, Marker, NavigationControl, ViewStateChangeEvent } from 'react-map-gl/maplibre';
 import type { LayerProps } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import styled from 'styled-components';
@@ -20,6 +20,7 @@ import CategoryLegend from './CategoryLegend';
 import { markerService } from '../services/markerService';
 import type { FeatureCollection, LineString } from 'geojson';
 import maplibregl from 'maplibre-gl';
+import MarkerPopupComponent from './MarkerPopup';
 
 const MapWrapper = styled.div`
   width: 100%;
@@ -62,35 +63,165 @@ const ErrorMessage = styled.div`
 
 const MarkerPopup = styled.div`
   background: white;
-  padding: 12px;
-  border-radius: 4px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  max-width: 200px;
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  max-width: 280px;
+  min-width: 220px;
+  position: absolute;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  
+  @media (max-width: 768px) {
+    max-width: 260px;
+    min-width: 200px;
+    padding: 12px;
+    bottom: 25px;
+  }
 
   h3 {
-    margin: 0 0 8px 0;
+    margin: 0 0 12px 0;
     font-size: 16px;
+    font-weight: bold;
+    color: #333;
+    
+    @media (max-width: 768px) {
+      font-size: 15px;
+      margin: 0 0 10px 0;
+    }
   }
 
   p {
-    margin: 4px 0;
+    margin: 8px 0;
     font-size: 14px;
+    line-height: 1.4;
+    
+    @media (max-width: 768px) {
+      font-size: 13px;
+      margin: 6px 0;
+    }
+  }
+
+  button {
+    margin-top: 12px;
+    padding: 6px 12px;
+    background-color: #ff4444;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    
+    @media (max-width: 768px) {
+      margin-top: 10px;
+      padding: 8px 12px;
+      font-size: 14px;
+    }
+    
+    &:hover {
+      background-color: #ff2222;
+    }
+  }
+
+  &:after {
+    content: '';
+    position: absolute;
+    bottom: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    border-top: 10px solid white;
   }
 `;
 
 const StatusMessage = styled.div`
+  position: fixed;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 10px 15px;
+  border-radius: 20px;
+  z-index: 1000;
+  font-size: 14px;
+  max-width: 90%;
+  text-align: center;
+  
+  @media (max-width: 768px) {
+    bottom: 60px;
+    max-width: 95%;
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+`;
+
+const LocationButton = styled.button`
+  background: white;
+  border: none;
+  border-radius: 4px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 4px 0;
+  cursor: pointer;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.1);
+  font-size: 16px;
+
+  @media (max-width: 768px) {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &:hover:not(:disabled) {
+    background: #f0f0f0;
+  }
+`;
+
+const ControlContainer = styled.div`
+  position: absolute;
+  top: 120px; 
+  right: 10px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+`;
+
+const InstructionMessage = styled.div`
   position: fixed;
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(0, 0, 0, 0.7);
   color: white;
-  padding: 10px 20px;
-  border-radius: 4px;
+  padding: 8px 16px;
+  border-radius: 20px;
   z-index: 1000;
   font-size: 14px;
   max-width: 80%;
   text-align: center;
+  pointer-events: none;
+  opacity: 0.8;
+  
+  @media (max-width: 768px) {
+    bottom: 15px;
+    max-width: 95%;
+    font-size: 12px;
+    padding: 6px 12px;
+  }
 `;
 
 const radiusLayer: LayerProps = {
@@ -184,7 +315,44 @@ const MapComponent: React.FC = () => {
     }
   }, [locationLoading, locationError, mapError, userLocation]);
 
-  const handleMapClick = useCallback((event: any) => {
+  const getRemainingTime = (marker: MarkerType): string => {
+    // If no expiration time, return empty string
+    if (!marker.expiresAt) return 'Süresiz';
+    
+    const currentTime = new Date().getTime();
+    const expiresAt = new Date(marker.expiresAt).getTime();
+    const remainingMs = expiresAt - currentTime;
+
+    if (remainingMs <= 0) {
+      return 'Süresi doldu';
+    }
+
+    const hours = Math.floor(remainingMs / (1000 * 60 * 60));
+    const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    return `${hours} saat ${minutes} dakika`;
+  };
+
+  const canDeleteMarker = (markerId: string): boolean => {
+    const marker = markers.find(m => m.id === markerId);
+    if (!marker) return false;
+    
+    // For security purposes, all markers can be deleted in this implementation
+    return true;
+  };
+
+  const handleDeleteMarker = useCallback(async (markerId: string) => {
+    try {
+      await markerService.removeMarker(markerId);
+      setSelectedMarker(null);
+      setStatusMessage('İşaretleme noktası başarıyla silindi');
+    } catch (error) {
+      console.error('Error removing marker:', error);
+      setMapError('İşaretleme noktası silinirken bir hata oluştu');
+    }
+  }, []);
+
+  const handleMapDoubleClick = useCallback((event: any) => {
     if (!referencePoint) return;
 
     const clickedCoords: Coordinates = {
@@ -201,9 +369,23 @@ const MapComponent: React.FC = () => {
       setPendingCoordinates(clickedCoords);
       setShowMarkerForm(true);
     } else {
-      alert('İşaretleme noktası konumunuzdan en fazla 1km uzaklıkta olabilir.');
+      setStatusMessage('İşaretleme noktası konumunuzdan en fazla 1km uzaklıkta olabilir.');
+      setTimeout(() => setStatusMessage(''), 3000);
     }
   }, [referencePoint]);
+
+  const handleMapClick = useCallback(() => {
+    // Close marker popup if open
+    if (selectedMarker) {
+      setSelectedMarker(null);
+    }
+    
+    // Close marker form if open
+    if (showMarkerForm) {
+      setShowMarkerForm(false);
+      setPendingCoordinates(null);
+    }
+  }, [selectedMarker, showMarkerForm]);
 
   const handleMarkerSubmit = async (metadata: MarkerMetadata) => {
     if (!pendingCoordinates) return;
@@ -292,6 +474,78 @@ const MapComponent: React.FC = () => {
       });
     }
   }, [userLocation]);
+
+  useEffect(() => {
+    let pressTimer: NodeJS.Timeout | null = null;
+    let startCoords: { x: number, y: number } | null = null;
+    const mapElement = document.querySelector('.maplibregl-map');
+    
+    if (!mapElement) return;
+    
+    const handleTouchStart = (e: Event) => {
+      const touchEvent = e as unknown as TouchEvent;
+      if (touchEvent.touches.length !== 1) return;
+      
+      startCoords = {
+        x: touchEvent.touches[0].clientX,
+        y: touchEvent.touches[0].clientY
+      };
+      
+      pressTimer = setTimeout(() => {
+        if (!mapRef.current || !startCoords) return;
+        
+        const lngLat = mapRef.current.unproject([startCoords.x, startCoords.y]);
+        
+        handleMapDoubleClick({
+          lngLat: {
+            lat: lngLat.lat,
+            lng: lngLat.lng
+          }
+        });
+      }, 800); // 800ms long press
+    };
+    
+    const handleTouchEnd = () => {
+      if (pressTimer) {
+        clearTimeout(pressTimer);
+        pressTimer = null;
+      }
+      startCoords = null;
+    };
+    
+    const handleTouchMove = (e: Event) => {
+      const touchEvent = e as unknown as TouchEvent;
+      if (!startCoords || !pressTimer) return;
+      
+      const moveThreshold = 10; // pixels
+      const currentX = touchEvent.touches[0].clientX;
+      const currentY = touchEvent.touches[0].clientY;
+      
+      const deltaX = Math.abs(currentX - startCoords.x);
+      const deltaY = Math.abs(currentY - startCoords.y);
+      
+      if (deltaX > moveThreshold || deltaY > moveThreshold) {
+        clearTimeout(pressTimer);
+        pressTimer = null;
+      }
+    };
+    
+    mapElement.addEventListener('touchstart', handleTouchStart);
+    mapElement.addEventListener('touchend', handleTouchEnd);
+    mapElement.addEventListener('touchcancel', handleTouchEnd);
+    mapElement.addEventListener('touchmove', handleTouchMove);
+    
+    return () => {
+      mapElement.removeEventListener('touchstart', handleTouchStart);
+      mapElement.removeEventListener('touchend', handleTouchEnd);
+      mapElement.removeEventListener('touchcancel', handleTouchEnd);
+      mapElement.removeEventListener('touchmove', handleTouchMove);
+      
+      if (pressTimer) {
+        clearTimeout(pressTimer);
+      }
+    };
+  }, [handleMapDoubleClick, mapRef]);
 
   if (locationLoading) {
     let message;
@@ -401,61 +655,6 @@ const MapComponent: React.FC = () => {
     ]
   };
 
-  const MarkerPopup = styled.div`
-    background: white;
-    padding: 16px;
-    border-radius: 8px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-    max-width: 280px;
-    min-width: 220px;
-    position: absolute;
-    bottom: 30px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 10;
-
-    h3 {
-      margin: 0 0 12px 0;
-      font-size: 16px;
-      font-weight: bold;
-      color: #333;
-    }
-
-    p {
-      margin: 8px 0;
-      font-size: 14px;
-      line-height: 1.4;
-    }
-
-    button {
-      margin-top: 12px;
-      padding: 6px 12px;
-      background-color: #ff4444;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 14px;
-      
-      &:hover {
-        background-color: #ff2222;
-      }
-    }
-
-    &:after {
-      content: '';
-      position: absolute;
-      bottom: -10px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 0;
-      height: 0;
-      border-left: 10px solid transparent;
-      border-right: 10px solid transparent;
-      border-top: 10px solid white;
-    }
-  `;
-
   return (
     <MapWrapper>
       <Map
@@ -491,6 +690,7 @@ const MapComponent: React.FC = () => {
           ]
         }}
         onClick={handleMapClick}
+        onDblClick={handleMapDoubleClick}
         onLoad={handleMapLoad}
         onError={handleMapError}
         reuseMaps
@@ -562,35 +762,23 @@ const MapComponent: React.FC = () => {
             </div>
             {selectedMarker?.id === marker.id && (
               <div style={{ position: 'absolute', zIndex: 3 }}>
-                <MarkerPopup>
-                  <h3>{marker.metadata.name}</h3>
-                  <p><strong>Kategori:</strong> {marker.metadata.category}</p>
-                  {marker.metadata.description && (
-                    <p><strong>Açıklama:</strong> {marker.metadata.description}</p>
-                  )}
-                  <p><strong>Eklenme Tarihi:</strong> {new Date(marker.timestamp).toLocaleString('tr-TR')}</p>
-                  <button
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      try {
-                        await markerService.removeMarker(marker.id);
-                        setSelectedMarker(null);
-                        setStatusMessage('İşaretleme noktası başarıyla silindi');
-                      } catch (error) {
-                        console.error('Error removing marker:', error);
-                        setMapError('İşaretleme noktası silinirken bir hata oluştu');
-                      }
-                    }}
-                  >
-                    Sil
-                  </button>
-                </MarkerPopup>
+                <MarkerPopupComponent
+                  marker={marker}
+                  onClose={() => setSelectedMarker(null)}
+                  onDelete={handleDeleteMarker}
+                  canDelete={canDeleteMarker(marker.id)}
+                  remainingTime={getRemainingTime(marker)}
+                />
               </div>
             )}
           </Marker>
         ))}
       </Map>
-      {statusMessage && <StatusMessage>{statusMessage}</StatusMessage>}
+      {statusMessage && (
+        <StatusMessage>
+          {statusMessage}
+        </StatusMessage>
+      )}
       {showMarkerForm && (
         <MarkerForm
           onSubmit={handleMarkerSubmit}
@@ -610,37 +798,11 @@ const MapComponent: React.FC = () => {
           {locationLoading ? '...' : '📍'}
         </LocationButton>
       </ControlContainer>
+      <InstructionMessage>
+        <p>Haritaya işaret eklemek için çift tıklayın veya mobilde uzun basın.</p>
+      </InstructionMessage>
     </MapWrapper>
   );
 };
-
-const LocationButton = styled.button`
-  background: white;
-  border: none;
-  border-radius: 4px;
-  padding: 8px;
-  margin: 4px;
-  cursor: pointer;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  font-size: 18px;
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  &:hover:not(:disabled) {
-    background: #f0f0f0;
-  }
-`;
-
-const ControlContainer = styled.div`
-  position: absolute;
-  top: 80px; 
-  right: 10px;
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-`;
 
 export default MapComponent;

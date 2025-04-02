@@ -49,37 +49,5 @@
     "creatorId": "838c45fe-4cd5-4f23-aa9e-2a7089aa168f",
     "deviceId": "838c45fe-4cd5-4f23-aa9e-2a7089aa168f",
     "expiresAt": "2025-03-31T04:31:56.511Z"
-  },
-  {
-    "id": "50477deb-e437-4170-9fa8-2864c4412c08",
-    "coordinates": {
-      "latitude": 38.39358269364351,
-      "longitude": 27.057889955174716
-    },
-    "metadata": {
-      "name": "Test",
-      "category": "other",
-      "description": ""
-    },
-    "timestamp": "2025-03-31T01:29:31.287Z",
-    "proof": "0x",
-    "creatorId": "838c45fe-4cd5-4f23-aa9e-2a7089aa168f",
-    "expiresAt": "2025-03-31T05:29:31.290Z"
-  },
-  {
-    "id": "58e5a809-e6b4-4af5-8f60-d111bbb2c548",
-    "coordinates": {
-      "latitude": 38.395097503497624,
-      "longitude": 27.052666236511072
-    },
-    "metadata": {
-      "name": "Tehlike",
-      "category": "hazard",
-      "description": ""
-    },
-    "timestamp": "2025-04-02T03:04:57.642Z",
-    "proof": "0x",
-    "creatorId": "b6d2daa9-9fc8-4f8d-9845-1a5bcb9f44ce",
-    "expiresAt": "2025-04-02T07:04:57.642Z"
   }
 ]

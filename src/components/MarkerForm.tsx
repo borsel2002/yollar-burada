@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { MarkerMetadata, markerCategories } from '../types/types';
 
@@ -22,16 +22,31 @@ const FormContainer = styled.div`
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   width: 100%;
   max-width: 400px;
+  margin: 0 10px;
+  
+  @media (max-width: 480px) {
+    padding: 15px;
+    max-width: 90%;
+  }
 `;
 
 const FormTitle = styled.h2`
   margin: 0 0 20px 0;
   font-size: 20px;
   color: #333;
+  
+  @media (max-width: 480px) {
+    font-size: 18px;
+    margin: 0 0 15px 0;
+  }
 `;
 
 const FormGroup = styled.div`
   margin-bottom: 15px;
+  
+  @media (max-width: 480px) {
+    margin-bottom: 12px;
+  }
 `;
 
 const Label = styled.label`
@@ -39,6 +54,11 @@ const Label = styled.label`
   margin-bottom: 5px;
   font-size: 14px;
   color: #666;
+  
+  @media (max-width: 480px) {
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
 `;
 
 const Input = styled.input`
@@ -52,18 +72,10 @@ const Input = styled.input`
     outline: none;
     border-color: #0080ff;
   }
-`;
-
-const Select = styled.select`
-  width: 100%;
-  padding: 8px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 14px;
-
-  &:focus {
-    outline: none;
-    border-color: #0080ff;
+  
+  @media (max-width: 480px) {
+    padding: 8px;
+    font-size: 16px; /* Prevent zoom on mobile */
   }
 `;
 
@@ -73,33 +85,68 @@ const TextArea = styled.textarea`
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 14px;
-  min-height: 100px;
+  min-height: 80px;
   resize: vertical;
 
   &:focus {
     outline: none;
     border-color: #0080ff;
   }
+  
+  @media (max-width: 480px) {
+    min-height: 60px;
+    padding: 8px;
+    font-size: 16px; /* Prevent zoom on mobile */
+  }
+`;
+
+const Select = styled.select`
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  background-color: white;
+
+  &:focus {
+    outline: none;
+    border-color: #0080ff;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 8px;
+    font-size: 16px; /* Prevent zoom on mobile */
+  }
 `;
 
 const ButtonGroup = styled.div`
   display: flex;
-  gap: 10px;
   justify-content: flex-end;
+  gap: 10px;
   margin-top: 20px;
+  
+  @media (max-width: 480px) {
+    margin-top: 15px;
+  }
 `;
 
-const Button = styled.button<{ $variant?: 'primary' | 'secondary' }>`
+const Button = styled.button<{ $variant?: 'primary' }>`
   padding: 8px 16px;
   border: none;
   border-radius: 4px;
-  font-size: 14px;
   cursor: pointer;
-  background-color: ${props => props.$variant === 'primary' ? '#0080ff' : '#f44336'};
-  color: white;
+  font-size: 14px;
+  background-color: ${props => props.$variant === 'primary' ? '#0080ff' : '#f0f0f0'};
+  color: ${props => props.$variant === 'primary' ? 'white' : '#333'};
+  transition: opacity 0.2s;
 
   &:hover {
     opacity: 0.9;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 10px 16px; /* Larger touch target */
+    font-size: 14px;
   }
 `;
 
@@ -114,6 +161,22 @@ const MarkerForm: React.FC<MarkerFormProps> = ({ onSubmit, onCancel }) => {
     category: 'other',
     description: ''
   });
+  
+  const formRef = useRef<HTMLDivElement>(null);
+
+  // Handle click outside to close the form
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (formRef.current && !formRef.current.contains(event.target as Node)) {
+        onCancel();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [onCancel]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,8 +198,8 @@ const MarkerForm: React.FC<MarkerFormProps> = ({ onSubmit, onCancel }) => {
   };
 
   return (
-    <FormOverlay>
-      <FormContainer>
+    <FormOverlay onClick={onCancel}>
+      <FormContainer ref={formRef} onClick={(e) => e.stopPropagation()}>
         <form onSubmit={handleSubmit}>
           <FormTitle>Yeni İşaretleme Noktası</FormTitle>
           
