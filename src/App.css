@@ -6,6 +6,31 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Dark mode styles */
+body.dark-mode {
+  background-color: #1a1a1a;
+  color: #f0f0f0;
+}
+
+/* Global dark mode overrides */
+body.dark-mode input,
+body.dark-mode select,
+body.dark-mode textarea {
+  background-color: #333;
+  color: #f0f0f0;
+  border-color: #555;
+}
+
+body.dark-mode button {
+  background-color: #444;
+  color: #f0f0f0;
+}
+
+body.dark-mode button:hover {
+  background-color: #555;
 }
 
 #root {
@@ -27,6 +52,12 @@ body {
 .maplibregl-popup-content {
   padding: 15px;
   border-radius: 8px;
+}
+
+/* Dark mode map popup styles */
+body.dark-mode .maplibregl-popup-content {
+  background-color: #333;
+  color: #f0f0f0;
 }
 
 .maplibregl-ctrl-top-right {

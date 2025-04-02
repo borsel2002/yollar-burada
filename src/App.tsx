@@ -2,6 +2,8 @@ import React from 'react';
 import './App.css';
 import MapComponent from './components/Map';
 import styled from 'styled-components';
+import { ThemeProvider } from './context/ThemeContext';
+import DarkModeToggle from './components/DarkModeToggle';
 
 const AppContainer = styled.div`
   width: 100vw;
@@ -11,9 +13,12 @@ const AppContainer = styled.div`
 
 function App() {
   return (
-    <AppContainer>
-      <MapComponent />
-    </AppContainer>
+    <ThemeProvider>
+      <AppContainer>
+        <DarkModeToggle />
+        <MapComponent />
+      </AppContainer>
+    </ThemeProvider>
   );
 }
 

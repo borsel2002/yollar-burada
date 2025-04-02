@@ -7,7 +7,7 @@ export interface ReferencePoint extends Coordinates {
   radiusMeters: number;
 }
 
-export type MarkerCategory = 'hazard' | 'accident' | 'roadwork' | 'traffic' | 'police' | 'camera' | 'other';
+export type MarkerCategory = 'hazard' | 'accident' | 'roadwork' | 'traffic' | 'police' | 'camera' | 'garbage' | 'expensive' | 'other';
 
 export interface MarkerMetadata {
   name: string;
@@ -44,6 +44,8 @@ export const markerCategories: CategoryColor[] = [
   { id: 'traffic', name: 'Trafik', color: '#FFD700', group: 'warning' },
   { id: 'police', name: 'Polis', color: '#0000FF', group: 'info' },
   { id: 'camera', name: 'Kamera', color: '#4169E1', group: 'info' },
+  { id: 'garbage', name: 'Çöp Kamyonu', color: '#228B22', group: 'info' },
+  { id: 'expensive', name: 'Pahallı İstasyon', color: '#8B008B', group: 'warning' },
   { id: 'other', name: 'Diğer', color: '#808080', group: 'secondary' }
 ];
 

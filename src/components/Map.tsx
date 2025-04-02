@@ -3,13 +3,16 @@ import MapLibreMap, {
   Marker as MapLibreMarker, 
   NavigationControl, 
   ScaleControl,
+  GeolocateControl,
   Source,
-  Layer 
+  Layer,
+  AttributionControl
 } from 'react-map-gl/maplibre';
-import type { LayerProps } from 'react-map-gl/maplibre';
+import type { LayerProps, MapRef } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import styled from 'styled-components';
+import styled, { createGlobalStyle } from 'styled-components';
 import { getDistance } from 'geolib';
+import { useTheme } from '../context/ThemeContext';
 import { 
   Coordinates, 
   ReferencePointStore, 
@@ -27,20 +30,24 @@ import { markerService } from '../services/markerService';
 import type { FeatureCollection, LineString } from 'geojson';
 import maplibregl from 'maplibre-gl';
 import MarkerPopup from './MarkerPopup';
+// Using unicode icons instead of react-icons
 
 const MapWrapper = styled.div`
   width: 100%;
   height: 100vh;
   position: relative;
+  touch-action: manipulation; /* Improves touch handling */
+  overflow: hidden;
 `;
 
-const LoadingOverlay = styled.div`
+const LoadingOverlay = styled.div<{ darkMode: boolean }>`
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(255, 255, 255, 0.95);
+  background: ${({ darkMode }) => darkMode ? 'rgba(0, 0, 0, 0.85)' : 'rgba(255, 255, 255, 0.95)'};
+  color: ${({ darkMode }) => darkMode ? '#f0f0f0' : 'inherit'};
   display: flex;
   justify-content: center;
   align-items: center;
@@ -69,31 +76,49 @@ const ErrorMessage = styled.div`
 
 const StatusMessage = styled.div`
   position: fixed;
-  bottom: 20px;
+  bottom: 110px; /* Adjusted to be above the category buttons */
   left: 50%;
   transform: translateX(-50%);
   background: rgba(0, 0, 0, 0.7);
   color: white;
   padding: 10px 20px;
-  border-radius: 4px;
+  border-radius: 12px;
   z-index: 1000;
   font-size: 14px;
   max-width: 80%;
   text-align: center;
+  backdrop-filter: blur(5px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
 `;
 
 const radiusLayer: LayerProps = {
   id: 'radius-line',
   type: 'line',
   paint: {
-    'line-color': '#0080ff',
+    'line-color': '#007AFF', /* Apple Maps blue */
     'line-width': 2,
     'line-opacity': 0.5,
     'line-dasharray': [2, 2]
   }
 };
 
+// Apple Maps style fill layer for radius
+const radiusFillLayer: LayerProps = {
+  id: 'radius-fill',
+  type: 'fill',
+  paint: {
+    'fill-color': '#007AFF',
+    'fill-opacity': 0.05
+  }
+};
+
 const MapComponent: React.FC = () => {
+  const { darkMode } = useTheme();
+  const [showLegend, setShowLegend] = useState(false);
+  const [holdTimer, setHoldTimer] = useState<NodeJS.Timeout | null>(null);
+  const [holdPosition, setHoldPosition] = useState<{x: number, y: number} | null>(null);
+  const [previewMarker, setPreviewMarker] = useState<Coordinates | null>(null);
+  const [showHoldIndicator, setShowHoldIndicator] = useState(false);
   const [showMarkerForm, setShowMarkerForm] = useState(false);
   const [pendingCoordinates, setPendingCoordinates] = useState<Coordinates | null>(null);
   const [markers, setMarkers] = useState<MarkerType[]>([]);
@@ -166,33 +191,76 @@ const MapComponent: React.FC = () => {
       setStatusMessage(locationError);
     } else if (mapError) {
       setStatusMessage(mapError);
-    } else if (userLocation) {
-      setStatusMessage(`Konum alındı: ${userLocation.latitude.toFixed(6)}, ${userLocation.longitude.toFixed(6)}`);
     } else {
+      // Don't show coordinates when location is obtained
       setStatusMessage('');
     }
   }, [locationLoading, locationError, mapError, userLocation]);
 
-  const handleMapClick = useCallback((event: any) => {
-    if (!referencePoint) return;
-
-    const clickedCoords: Coordinates = {
+  // Handle mouse/touch down - start the hold timer
+  const handleMapMouseDown = useCallback((event: any) => {
+    if (!referencePoint || holdTimer) return;
+    
+    // Get coordinates
+    const coords: Coordinates = {
       latitude: event.lngLat.lat,
       longitude: event.lngLat.lng
     };
-
+    
+    // Check if within radius
     const distance = getDistance(
       { latitude: referencePoint.latitude, longitude: referencePoint.longitude },
-      clickedCoords
+      coords
     );
-
+    
     if (distance <= 1000) {
-      setPendingCoordinates(clickedCoords);
-      setShowMarkerForm(true);
-    } else {
-      alert('İşaretleme noktası konumunuzdan en fazla 1km uzaklıkta olabilir.');
+      // Set position for preview
+      setHoldPosition({x: event.point.x, y: event.point.y});
+      
+      // Start timer for hold detection (500ms = half second)
+      const timer = setTimeout(() => {
+        setPreviewMarker(coords);
+        setShowHoldIndicator(true);
+        
+        // After showing the indicator, wait a bit more before showing the form
+        setTimeout(() => {
+          setPendingCoordinates(coords);
+          setShowMarkerForm(true);
+          setShowHoldIndicator(false);
+          setPreviewMarker(null);
+        }, 400); // Short delay for animation
+      }, 500);
+      
+      setHoldTimer(timer);
     }
-  }, [referencePoint]);
+  }, [referencePoint, holdTimer]);
+  
+  // Handle mouse/touch up - clear the timer if the hold wasn't long enough
+  const handleMapMouseUp = useCallback(() => {
+    if (holdTimer) {
+      clearTimeout(holdTimer);
+      setHoldTimer(null);
+    }
+    setHoldPosition(null);
+    setShowHoldIndicator(false);
+  }, [holdTimer]);
+  
+  // Handle mouse/touch move - cancel the operation if the user moves too much
+  const handleMapMouseMove = useCallback((event: any) => {
+    if (holdPosition && holdTimer) {
+      const dx = event.point.x - holdPosition.x;
+      const dy = event.point.y - holdPosition.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // If moved more than 10 pixels, cancel the hold
+      if (distance > 10) {
+        clearTimeout(holdTimer);
+        setHoldTimer(null);
+        setHoldPosition(null);
+        setShowHoldIndicator(false);
+      }
+    }
+  }, [holdPosition, holdTimer]);
 
   const handleMarkerSubmit = async (metadata: MarkerMetadata) => {
     if (!pendingCoordinates) return;
@@ -326,7 +394,7 @@ const MapComponent: React.FC = () => {
         );
     }
     return (
-      <LoadingOverlay>
+      <LoadingOverlay darkMode={darkMode}>
         <div style={{ textAlign: 'center' }}>
           {message}
           <div style={{ marginTop: '20px' }}>
@@ -355,7 +423,7 @@ const MapComponent: React.FC = () => {
   }
 
   if (!referencePoint) {
-    return <LoadingOverlay>Harita yükleniyor... Lütfen bekleyin.</LoadingOverlay>;
+    return <LoadingOverlay darkMode={darkMode}>Harita yükleniyor... Lütfen bekleyin.</LoadingOverlay>;
   }
 
   if (mapError) {
@@ -401,7 +469,7 @@ const MapComponent: React.FC = () => {
     <MapWrapper>
       <MapLibreMap
         ref={mapRef}
-        mapLib={import('maplibre-gl')}
+        mapLib={maplibregl}
         initialViewState={{
           longitude: referencePoint?.longitude || 0,
           latitude: referencePoint?.latitude || 0,
@@ -414,10 +482,12 @@ const MapComponent: React.FC = () => {
             'osm': {
               type: 'raster',
               tiles: [
-                'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png'
+                darkMode 
+                  ? 'https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png'
+                  : 'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'
               ],
               tileSize: 256,
-              attribution: '© Stadia Maps, © OpenMapTiles, © OpenStreetMap contributors'
+              attribution: '© OpenStreetMap contributors, © CARTO'
             }
           },
           layers: [
@@ -430,22 +500,32 @@ const MapComponent: React.FC = () => {
             }
           ]
         }}
-        onClick={handleMapClick}
+        onMouseDown={handleMapMouseDown}
+        onTouchStart={handleMapMouseDown}
+        onMouseUp={handleMapMouseUp}
+        onTouchEnd={handleMapMouseUp}
+        onMouseMove={handleMapMouseMove}
+        onTouchMove={handleMapMouseMove}
         onLoad={handleMapLoad}
         onError={handleMapError}
+        touchZoomRotate={true}
+        touchPitch={true}
+        dragRotate={true}
         reuseMaps
         preserveDrawingBuffer
+        attributionControl={false}
       >
-        <NavigationControl position="top-right" />
+        <AttributionControl position="bottom-left" compact={true} />
         
-        {/* Radius line */}
+        {/* Radius line and fill */}
         {referencePoint && (
           <Source id="radius" type="geojson" data={radiusGeoJSON}>
+            <Layer {...radiusFillLayer} />
             <Layer {...radiusLayer} />
           </Source>
         )}
 
-        {/* User location marker */}
+        {/* User location marker with Apple Maps style */}
         {userLocation && (
           <MapLibreMarker
             longitude={userLocation.longitude}
@@ -456,13 +536,28 @@ const MapComponent: React.FC = () => {
               style={{
                 width: '24px',
                 height: '24px',
-                backgroundColor: '#0080ff',
+                backgroundColor: '#007AFF', /* Apple Maps blue */
                 borderRadius: '50%',
-                border: '2px solid white',
-                boxShadow: '0 0 4px rgba(0,0,0,0.3)',
-                transform: 'translate(-12px, -12px)'
+                border: '3px solid white',
+                boxShadow: '0 0 8px rgba(0,0,0,0.3)',
+                transform: 'translate(-12px, -12px)',
+                position: 'relative',
               }}
-            />
+            >
+              {/* Pulsing animation ring - Apple Maps style */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '-8px',
+                  left: '-8px',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  border: '2px solid rgba(0, 122, 255, 0.5)',
+                  animation: 'pulse 2s infinite',
+                }}
+              />
+            </div>
           </MapLibreMarker>
         )}
 
@@ -481,20 +576,51 @@ const MapComponent: React.FC = () => {
                 handleMarkerClick(marker);
               }}
             >
-              <svg
-                height="24"
-                viewBox="0 0 24 24"
-                width="24"
+              {/* Apple Maps style pin marker */}
+              <div
                 style={{
-                  fill: getMarkerColor(marker.metadata.category),
-                  stroke: 'white',
-                  strokeWidth: 2,
-                  transform: 'translate(-12px, -24px)',
-                  filter: 'drop-shadow(0 0 2px rgba(0,0,0,0.5))'
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  transform: 'translate(-12px, -30px)',
                 }}
               >
-                <path d="M12 0c-4.198 0-8 3.403-8 7.602 0 4.198 3.469 9.21 8 16.398 4.531-7.188 8-12.2 8-16.398 0-4.199-3.801-7.602-8-7.602zm0 11c-1.657 0-3-1.343-3-3s1.343-3 3-3 3 1.343 3 3-1.343 3-3 3z" />
-              </svg>
+                <div
+                  style={{
+                    width: '30px',
+                    height: '30px',
+                    borderRadius: '50%',
+                    backgroundColor: getMarkerColor(marker.metadata.category),
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    boxShadow: '0 2px 5px rgba(0,0,0,0.3)',
+                    border: '2px solid white',
+                  }}
+                >
+                  {/* Category Icon based on marker type */}
+                  <span style={{ color: 'white', fontSize: '14px', fontWeight: 'bold' }}>
+                    {marker.metadata.category === 'hazard' && '⚠️'}
+                    {marker.metadata.category === 'accident' && '🚧'}
+                    {marker.metadata.category === 'roadwork' && '🚜'}
+                    {marker.metadata.category === 'traffic' && '🚦'}
+                    {marker.metadata.category === 'police' && '👮'}
+                    {marker.metadata.category === 'camera' && '📷'}
+                    {marker.metadata.category === 'garbage' && '🚛'}
+                    {marker.metadata.category === 'expensive' && '💰'}
+                    {marker.metadata.category === 'other' && '❓'}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    width: '12px',
+                    height: '6px',
+                    backgroundColor: getMarkerColor(marker.metadata.category),
+                    clipPath: 'polygon(0% 0%, 100% 0%, 50% 100%)',
+                    marginTop: '-2px',
+                  }}
+                />
+              </div>
             </div>
             {selectedMarker?.id === marker.id && (
               <MarkerPopup
@@ -507,6 +633,32 @@ const MapComponent: React.FC = () => {
             )}
           </MapLibreMarker>
         ))}
+        {/* Hold/drop animation indicator */}
+        {showHoldIndicator && previewMarker && (
+          <MapLibreMarker
+            longitude={previewMarker.longitude}
+            latitude={previewMarker.latitude}
+            anchor="bottom"
+          >
+            <div style={{
+              width: '30px',
+              height: '30px',
+              borderRadius: '50%',
+              backgroundColor: '#007AFF',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              boxShadow: '0 2px 5px rgba(0,0,0,0.3)',
+              border: '2px solid white',
+              animation: 'markerDrop 0.4s ease-out',
+              transform: 'translate(-15px, -15px)',
+              position: 'relative',
+              zIndex: 1000
+            }}>
+              <span style={{ color: 'white', fontSize: '18px' }}>📍</span>
+            </div>
+          </MapLibreMarker>
+        )}
       </MapLibreMap>
       {statusMessage && <StatusMessage>{statusMessage}</StatusMessage>}
       {showMarkerForm && (
@@ -518,29 +670,48 @@ const MapComponent: React.FC = () => {
           }}
         />
       )}
-      <CategoryLegend />
+      {/* Mobile-optimized controls with Apple Maps style */}
+      <MobileCategoryBar />
       <ControlContainer>
-        <LocationButton 
+        <AppleStyleButton 
           onClick={handleGoToUserLocation}
           disabled={!userLocation || locationLoading}
           title={locationError || 'Konumuma Git'}
+          style={{ marginBottom: '10px' }}
         >
-          {locationLoading ? '...' : '📍'}
-        </LocationButton>
+          <span style={{ fontSize: '22px', color: '#007AFF' }}>📍</span>
+        </AppleStyleButton>
+        <AppleStyleButton
+          onClick={() => mapRef.current?.resetNorthPitch()}
+          title="Kuzeye Döndür"
+        >
+          <span style={{ fontSize: '22px', color: '#007AFF' }}>🧭</span>
+        </AppleStyleButton>
       </ControlContainer>
+      
+      {/* Toggle for CategoryLegend with Apple Maps style */}
+      <LegendToggle onClick={() => setShowLegend(!showLegend)}>
+        <span style={{ fontSize: '22px', color: '#007AFF' }}>📊</span>
+      </LegendToggle>
+      
+      {showLegend && <CategoryLegend />}
     </MapWrapper>
   );
 };
 
-const LocationButton = styled.button`
+const AppleStyleButton = styled.button`
   background: white;
   border: none;
-  border-radius: 4px;
-  padding: 8px;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   margin: 4px;
   cursor: pointer;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  font-size: 18px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  transition: all 0.2s ease;
 
   &:disabled {
     opacity: 0.5;
@@ -548,17 +719,223 @@ const LocationButton = styled.button`
   }
 
   &:hover:not(:disabled) {
-    background: #f0f0f0;
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.95);
   }
 `;
 
 const ControlContainer = styled.div`
   position: absolute;
-  top: 10px;
-  right: 10px;
+  bottom: 100px;
+  right: 15px;
   z-index: 1000;
   display: flex;
   flex-direction: column;
+  @media (max-height: 600px) {
+    bottom: 80px;
+  }
 `;
 
-export default MapComponent;
+const LegendToggle = styled.button`
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  z-index: 1000;
+  background: white;
+  border: none;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+`;
+
+// Apple Maps style bottom category bar
+const CategoryBarContainer = styled.div`
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+  border-radius: 15px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  max-width: 90%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+`;
+
+const CategoryButton = styled.button<{ color: string }>`
+  background: white;
+  border: none;
+  border-radius: 12px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 62px;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  transition: all 0.2s ease;
+  border-bottom: 3px solid ${props => props.color};
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+`;
+
+const CategoryButtonIcon = styled.div<{ color: string }>`
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background-color: ${props => props.color};
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 5px;
+  color: white;
+  font-weight: bold;
+`;
+
+const CategoryButtonText = styled.span`
+  font-size: 10px;
+  text-align: center;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+`;
+
+// Apple Maps style category bar at the bottom
+const MobileCategoryBar: React.FC = () => {
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  
+  const handleCategorySelect = (categoryId: string) => {
+    // In a real implementation, this would filter markers or perform an action
+    setSelectedCategory(categoryId === selectedCategory ? null : categoryId);
+  };
+  
+  return (
+    <CategoryBarContainer>
+      {markerCategories.map(category => (
+        <CategoryButton 
+          key={category.id}
+          color={category.color}
+          onClick={() => handleCategorySelect(category.id)}
+          style={selectedCategory === category.id ? { background: '#f0f0f0' } : {}}
+        >
+          <CategoryButtonIcon color={category.color}>
+            {category.id === 'hazard' && '⚠️'}
+            {category.id === 'accident' && '🚧'}
+            {category.id === 'roadwork' && '🚜'}
+            {category.id === 'traffic' && '🚦'}
+            {category.id === 'police' && '👮'}
+            {category.id === 'camera' && '📷'}
+            {category.id === 'garbage' && '🚛'}
+            {category.id === 'expensive' && '💰'}
+            {category.id === 'other' && '❓'}
+          </CategoryButtonIcon>
+          <CategoryButtonText>{category.name}</CategoryButtonText>
+        </CategoryButton>
+      ))}
+    </CategoryBarContainer>
+  );
+};
+
+// Add global styles for Apple Maps animations
+const GlobalStyle = createGlobalStyle`
+  @keyframes pulse {
+    0% {
+      transform: scale(0.95);
+      opacity: 0.7;
+    }
+    70% {
+      transform: scale(1.2);
+      opacity: 0;
+    }
+    100% {
+      transform: scale(0.95);
+      opacity: 0;
+    }
+  }
+  
+  @keyframes markerDrop {
+    0% {
+      transform: scale(0.5) translateY(-30px);
+      opacity: 0;
+    }
+    50% {
+      transform: scale(1.1) translateY(0);
+      opacity: 1;
+    }
+    75% {
+      transform: scale(0.95) translateY(0);
+    }
+    100% {
+      transform: scale(1) translateY(0);
+    }
+  }
+  
+  @keyframes markerPulse {
+    0% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.2);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
+  }
+  
+  * {
+    box-sizing: border-box;
+  }
+`;
+
+const MapComponentWithStyles = () => (
+  <>
+    <GlobalStyle />
+    <MapComponent />
+  </>
+);
+
+export default MapComponentWithStyles;
